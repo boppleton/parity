@@ -245,7 +245,7 @@ impl Provider where {
 	}
 
 	/// Process received private transaction
-	pub fn import_private_transaction(&self, rlp: &[u8]) -> Result<(), Error> {
+	pub fn import_private_transaction(&self, rlp: &[u8]) -> Result<H256, Error> {
 		trace!("Private transaction received");
 		let private_tx: PrivateTransaction = Rlp::new(rlp).as_val()?;
 		let contract = private_tx.contract;
@@ -261,14 +261,17 @@ impl Provider where {
 		self.transactions_for_verification.add_transaction(
 			original_tx,
 			validation_account.map(|&account| account),
-			private_tx,
+			private_tx.clone(),
 			self.pool_client(&nonce_cache),
 		)?;
 		// NOTE This will just fire `on_private_transaction_queued` but from a client thread.
 		// It seems that a lot of heavy work (verification) is done in this thread anyway
 		// it might actually make sense to decouple it from clientService and just use dedicated thread
 		// for both verification and execution.
-		self.channel.send(ClientIoMessage::NewPrivateTransaction).map_err(|_| ErrorKind::ClientIsMalformed.into())
+		if let Err(e) = self.channel.send(ClientIoMessage::NewPrivateTransaction) {
+			trace!("Error sending NewPrivateTransaction message: {:?}", e);
+		}
+		Ok(private_tx.hash())
 	}
 
 	fn pool_client<'a>(&'a self, nonce_cache: &'a RwLock<HashMap<Address, U256>>) -> miner::pool_client::PoolClient<'a, Client> {
@@ -329,7 +332,7 @@ impl Provider where {
 
 	/// Add signed private transaction into the store
 	/// Creates corresponding public transaction if last required singature collected and sends it to the chain
-	pub fn import_signed_private_transaction(&self, rlp: &[u8]) -> Result<(), Error> {
+	pub fn import_signed_private_transaction(&self, rlp: &[u8]) -> Result<H256, Error> {
 		let tx: SignedPrivateTransaction = Rlp::new(rlp).as_val()?;
 		trace!("Signature for private transaction received: {:?}", tx);
 		let private_hash = tx.private_transaction_hash();
@@ -337,11 +340,10 @@ impl Provider where {
 			None => {
 				// Not our transaction, broadcast further to peers
 				self.broadcast_signed_private_transaction(tx.hash(), rlp.into());
-				return Ok(());
+				return Ok(private_hash);
 			},
 			Some(desc) => desc,
 		};
-
 		let last = self.last_required_signature(&desc, tx.signature())?;
 
 		if last {
@@ -389,7 +391,7 @@ impl Provider where {
 				}
 			}
 		}
-		Ok(())
+		Ok(private_hash)
 	}
 
 	fn last_required_signature(&self, desc: &PrivateTransactionSigningDesc, sign: Signature) -> Result<bool, Error>  {
