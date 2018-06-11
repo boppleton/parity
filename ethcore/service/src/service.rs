@@ -238,6 +238,9 @@ impl IoHandler<ClientIoMessage> for ClientIoHandler {
 			ClientIoMessage::NewPrivateTransaction => if let Err(e) = self.private_tx.provider.on_private_transaction_queued() {
 				warn!("Failed to handle private transaction {:?}", e);
 			},
+			ClientIoMessage::NewSignedPrivateTransaction => if let Err(e) = self.private_tx.provider.on_signed_private_transaction_queued() {
+				warn!("Failed to handle signed private transaction {:?}", e);
+			},
 			_ => {} // ignore other messages
 		}
 	}

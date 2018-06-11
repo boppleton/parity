@@ -39,5 +39,7 @@ pub enum ClientIoMessage {
 	NewMessage(Bytes),
 	/// New private transaction arrived
 	NewPrivateTransaction,
+	/// New signed private transaction received
+	NewSignedPrivateTransaction,
 }
 
