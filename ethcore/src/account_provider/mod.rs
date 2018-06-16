@@ -290,8 +290,12 @@ impl AccountProvider {
 
 	/// Returns addresses of hardware accounts.
 	pub fn hardware_accounts(&self) -> Result<Vec<Address>, Error> {
-		let accounts = self.hardware_store.as_ref().map_or_else(|| Vec::new(), |h| h.list_wallets());
-		Ok(accounts.into_iter().map(|a| a.address).collect())
+		if let Some(accounts) = self.hardware_store.as_ref().map(|h| h.list_wallets()) { 
+			if !accounts.is_empty() {
+				return Ok(accounts.into_iter().map(|a| a.address).collect());
+			}
+		}
+		Err(SSError::Custom("No hardware wallet accounts were found".into()))
 	}
 
 	/// Get a list of paths to locked hardware wallets
